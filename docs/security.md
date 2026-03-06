@@ -72,6 +72,22 @@ All agents are pre-configured with defense rules in their `AGENTS.md`:
 | Spoofed system messages | Real OpenClaw system messages include sessionId |
 | Memory poisoning | Agents can't modify core files from external content |
 
+## Context Persistence & Recovery
+
+Clawdboss includes the **WAL (Write-Ahead Log) Protocol** to protect against context loss:
+
+### How It Works
+
+1. **SESSION-STATE.md** — Active working memory. Every correction, decision, and important detail is written here BEFORE the agent responds. This is the agent's "RAM" — chat history is just a buffer.
+
+2. **Working Buffer** (`memory/working-buffer.md`) — When context usage hits ~60%, agents log every exchange to this file. After compaction (context window reset), the agent reads this buffer first to recover what was discussed.
+
+3. **Compaction Recovery** — When an agent detects context loss (session starts with `<summary>`, or knowledge gaps), it automatically reads the working buffer and SESSION-STATE.md to recover — never asks "what were we discussing?"
+
+### Why This Matters
+
+Without WAL, agents lose corrections, decisions, and details when context compacts. A user says "it's blue, not red" — the agent acknowledges it — context compacts — the agent goes back to red. WAL prevents this by writing the correction to a file before responding.
+
 ## Network Security
 
 - OpenClaw Gateway binds to `127.0.0.1` (localhost only)

@@ -682,6 +682,36 @@ open(sys.argv[2], 'w').write(content)
   "$AGENT_NAME" "$AGENT_PRONOUNS" "$AGENT_EMOJI" "$USER_NAME" "$USER_TIMEZONE"
     fi
   done
+
+  # Create WAL Protocol files (SESSION-STATE.md + working-buffer.md)
+  cat > "$WORKSPACE_DIR/SESSION-STATE.md" << 'WALEOF'
+# SESSION-STATE.md — Active Working Memory
+
+**Last Updated:** —
+**Active Task:** —
+**Status:** idle
+
+## Corrections / Decisions
+_(Capture every correction, decision, preference, proper noun here BEFORE responding)_
+
+## Active Details
+_(Names, IDs, URLs, values that matter for the current task)_
+
+## Draft State
+_(If working on something iterative — current version lives here)_
+WALEOF
+
+  cat > "$WORKSPACE_DIR/memory/working-buffer.md" << 'BUFEOF'
+# Working Buffer (Danger Zone Log)
+
+**Status:** INACTIVE
+**Started:** —
+
+_(This buffer activates when context hits ~60%. Every exchange after that point gets logged here to survive compaction.)_
+
+---
+BUFEOF
+
   success "Main workspace: $WORKSPACE_DIR"
 
   # Deploy specialist workspaces
@@ -724,6 +754,36 @@ open(sys.argv[2], 'w').write(content)
 " "$TEMPLATES_DIR/workspace/USER.md" "$agent_ws/USER.md" "$USER_NAME" "$USER_TIMEZONE"
 
     cp "$TEMPLATES_DIR/workspace/TOOLS.md" "$agent_ws/TOOLS.md"
+
+    # Create WAL Protocol files for specialist agents too
+    cat > "$agent_ws/SESSION-STATE.md" << 'WALEOF'
+# SESSION-STATE.md — Active Working Memory
+
+**Last Updated:** —
+**Active Task:** —
+**Status:** idle
+
+## Corrections / Decisions
+_(Capture every correction, decision, preference, proper noun here BEFORE responding)_
+
+## Active Details
+_(Names, IDs, URLs, values that matter for the current task)_
+
+## Draft State
+_(If working on something iterative — current version lives here)_
+WALEOF
+
+    cat > "$agent_ws/memory/working-buffer.md" << 'BUFEOF'
+# Working Buffer (Danger Zone Log)
+
+**Status:** INACTIVE
+**Started:** —
+
+_(This buffer activates when context hits ~60%. Every exchange after that point gets logged here to survive compaction.)_
+
+---
+BUFEOF
+
     success "$agent_type workspace: $agent_ws"
   }
 
