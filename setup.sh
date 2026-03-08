@@ -2181,36 +2181,10 @@ CADDYEOF
     success "Memory directory ready: $OPENCLAW_STATE_DIR/memory"
   fi
 
-  # ---- Built-in Skills Activation ----
-  echo ""
-  echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
-  echo -e "${GREEN}║${NC}  ${BOLD}Built-in Skills Activation${NC}                  ${GREEN}║${NC}"
-  echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
-  echo ""
-  info "OpenClaw ships with 50+ built-in skills (Whisper transcription,"
-  info "Nano Banana Pro image gen, mcporter MCP management, TTS, email, etc.)"
-  info "Many need API keys or CLI tools to activate."
-  echo ""
-  info "The OpenClaw skills wizard will show which are ready and which"
-  info "need dependencies — you can install them and set API keys interactively."
-  echo ""
-  ask "Run OpenClaw skills setup now? (recommended) [Y/n]"
-  read -r RUN_SKILLS_SETUP
-  RUN_SKILLS_SETUP="${RUN_SKILLS_SETUP:-Y}"
-
-  if [[ "$RUN_SKILLS_SETUP" =~ ^[Yy] ]]; then
-    echo ""
-    info "Launching OpenClaw skills wizard..."
-    echo ""
-    openclaw configure --section skills 2>&1 || {
-      warn "Skills wizard exited with an error."
-      info "You can run it again later: openclaw configure --section skills"
-    }
-    echo ""
-    success "Skills setup complete."
-  else
-    info "Skipped. Run later with: openclaw configure --section skills"
-  fi
+  # ---- Built-in Skills Dependencies ----
+  # Pre-install skill dependencies directly (no Homebrew needed on Linux)
+  # This replaces `openclaw configure --section skills` which fails without brew
+  install_skill_deps
 
   # ---- OAuth / Deferred Auth Login ----
   if [ -n "${OAUTH_DEFERRED:-}" ]; then
@@ -2261,6 +2235,214 @@ CADDYEOF
   harden_server
 
   show_summary
+}
+
+# ============================================================
+# Install Skill Dependencies (replaces openclaw configure --section skills)
+# Pre-installs binaries that OpenClaw skills need, without requiring Homebrew.
+# ============================================================
+
+install_skill_deps() {
+  echo ""
+  echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
+  echo -e "${GREEN}║${NC}  ${BOLD}Built-in Skills — Dependency Install${NC}        ${GREEN}║${NC}"
+  echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
+  echo ""
+  info "Installing dependencies for OpenClaw's built-in skills."
+  info "This replaces the interactive skills wizard with direct installs."
+  echo ""
+
+  local BIN_DIR="$HOME/.local/bin"
+  mkdir -p "$BIN_DIR"
+  export PATH="$BIN_DIR:$PATH"
+
+  local INSTALLED=0
+  local SKIPPED=0
+  local FAILED=0
+
+  # --- uv (Python package runner — needed by nano-banana-pro, nano-pdf) ---
+  if ! command -v uv &>/dev/null; then
+    info "Installing uv (Python package manager)..."
+    if curl -LsSf https://astral.sh/uv/install.sh 2>/dev/null | sh 2>/dev/null; then
+      success "uv installed"
+      INSTALLED=$((INSTALLED + 1))
+    else
+      warn "Could not install uv. Install manually: curl -LsSf https://astral.sh/uv/install.sh | sh"
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    success "uv already installed ($(uv --version 2>/dev/null))"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- sag (ElevenLabs TTS) ---
+  if ! command -v sag &>/dev/null; then
+    info "Installing sag (ElevenLabs TTS)..."
+    local SAG_ARCH="amd64"
+    [ "$(uname -m)" = "aarch64" ] && SAG_ARCH="arm64"
+    local SAG_URL="https://github.com/steipete/sag/releases/latest/download/sag_$(curl -s https://api.github.com/repos/steipete/sag/releases/latest | grep -oP '"tag_name":\s*"v\K[^"]+')_linux_${SAG_ARCH}.tar.gz"
+    if curl -fsSL -o /tmp/sag.tar.gz "$SAG_URL" 2>/dev/null; then
+      (cd /tmp && tar xzf sag.tar.gz sag 2>/dev/null && mv sag "$BIN_DIR/" && chmod +x "$BIN_DIR/sag")
+      rm -f /tmp/sag.tar.gz
+      success "sag installed to $BIN_DIR/sag"
+      INSTALLED=$((INSTALLED + 1))
+    else
+      warn "Could not download sag. Install manually from: https://github.com/steipete/sag/releases"
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    success "sag already installed"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- Gemini CLI (Google AI) ---
+  if ! command -v gemini &>/dev/null; then
+    info "Installing Gemini CLI..."
+    if npm install -g @google/gemini-cli 2>/dev/null; then
+      success "Gemini CLI installed"
+      INSTALLED=$((INSTALLED + 1))
+    else
+      warn "Could not install Gemini CLI. Install manually: npm install -g @google/gemini-cli"
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    success "Gemini CLI already installed"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- nano-pdf (via uv) ---
+  if ! command -v nano-pdf &>/dev/null; then
+    if command -v uv &>/dev/null; then
+      info "Installing nano-pdf..."
+      uv tool install nano-pdf 2>/dev/null \
+        && success "nano-pdf installed" && INSTALLED=$((INSTALLED + 1)) \
+        || { warn "nano-pdf install failed"; FAILED=$((FAILED + 1)); }
+    else
+      warn "Skipping nano-pdf (uv not available)"
+      SKIPPED=$((SKIPPED + 1))
+    fi
+  else
+    success "nano-pdf already installed"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- gh CLI (GitHub) ---
+  if ! command -v gh &>/dev/null; then
+    info "Installing GitHub CLI (gh)..."
+    if command -v apt-get &>/dev/null; then
+      # Official GitHub CLI repo for Debian/Ubuntu
+      (type -p wget >/dev/null || apt-get install -y -qq wget) \
+        && mkdir -p -m 755 /etc/apt/keyrings \
+        && out=$(mktemp) && wget -nv -O"$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg 2>/dev/null \
+        && cat "$out" | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+        && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+        && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli-stable.list > /dev/null \
+        && apt-get update -qq && apt-get install gh -y -qq \
+        && success "gh CLI installed" && INSTALLED=$((INSTALLED + 1)) \
+        || { warn "gh install failed — install manually: https://cli.github.com"; FAILED=$((FAILED + 1)); }
+      rm -f "$out" 2>/dev/null
+    else
+      warn "Could not install gh CLI. Install manually: https://cli.github.com"
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    success "gh CLI already installed ($(gh --version 2>/dev/null | head -1))"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- ffmpeg (video-frames skill) ---
+  if ! command -v ffmpeg &>/dev/null; then
+    info "Installing ffmpeg..."
+    if apt-get install -y -qq ffmpeg 2>/dev/null; then
+      success "ffmpeg installed"
+      INSTALLED=$((INSTALLED + 1))
+    else
+      warn "Could not install ffmpeg. Install manually: apt-get install ffmpeg"
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    success "ffmpeg already installed"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- tmux ---
+  if ! command -v tmux &>/dev/null; then
+    info "Installing tmux..."
+    if apt-get install -y -qq tmux 2>/dev/null; then
+      success "tmux installed"
+      INSTALLED=$((INSTALLED + 1))
+    else
+      warn "Could not install tmux. Install manually: apt-get install tmux"
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    success "tmux already installed"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- jq (session-logs, trello) ---
+  if ! command -v jq &>/dev/null; then
+    info "Installing jq..."
+    if apt-get install -y -qq jq 2>/dev/null; then
+      success "jq installed"
+      INSTALLED=$((INSTALLED + 1))
+    else
+      warn "Could not install jq"
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    success "jq already installed"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- ripgrep (session-logs) ---
+  if ! command -v rg &>/dev/null; then
+    info "Installing ripgrep..."
+    if apt-get install -y -qq ripgrep 2>/dev/null; then
+      success "ripgrep installed"
+      INSTALLED=$((INSTALLED + 1))
+    else
+      warn "Could not install ripgrep"
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    success "ripgrep already installed"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- clawhub (skill marketplace CLI — already handled in preflight but ensure) ---
+  if ! command -v clawhub &>/dev/null; then
+    info "Installing clawhub..."
+    npm install -g clawhub 2>/dev/null \
+      && success "clawhub installed" && INSTALLED=$((INSTALLED + 1)) \
+      || { warn "clawhub install failed"; FAILED=$((FAILED + 1)); }
+  else
+    success "clawhub already installed"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- mcporter (MCP server management — already installed by our optional step) ---
+  if ! command -v mcporter &>/dev/null; then
+    info "Installing mcporter..."
+    npm install -g mcporter 2>/dev/null \
+      && success "mcporter installed" && INSTALLED=$((INSTALLED + 1)) \
+      || { warn "mcporter install failed"; FAILED=$((FAILED + 1)); }
+  else
+    success "mcporter already installed"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  # --- Summary ---
+  echo ""
+  info "Skills dependencies: ${INSTALLED} installed, ${SKIPPED} already present, ${FAILED} failed"
+  if [ "$FAILED" -gt 0 ]; then
+    warn "Some installs failed. Run 'openclaw doctor' later to check skill status."
+  fi
+
+  # Note about macOS-only skills
+  info "Some skills (Apple Notes, Apple Reminders, iMessage, Peekaboo, etc.) are macOS-only."
+  info "Run 'openclaw configure --section skills' for API key setup after install."
+  echo ""
 }
 
 # ============================================================
