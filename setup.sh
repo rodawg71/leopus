@@ -473,59 +473,87 @@ collect_keys() {
 
   # LLM Provider
   echo -e "${BOLD}LLM Provider:${NC}"
-  echo "  1) GitHub Copilot proxy (free with Copilot subscription)"
-  echo "  2) OpenAI API direct"
-  echo "  3) Anthropic API direct"
-  echo "  4) Google Gemini API"
-  echo "  5) OpenRouter (access 400+ models)"
-  echo "  6) Kimi / Moonshot AI"
-  echo "  7) Other (manual config later)"
   echo ""
-  ask "Choose provider [1-7]"
+  echo "  ${BOLD}API Key providers:${NC}"
+  echo "  1) OpenAI API"
+  echo "  2) Anthropic API"
+  echo "  3) Google Gemini API"
+  echo "  4) OpenRouter (400+ models)"
+  echo "  5) Kimi / Moonshot AI"
+  echo ""
+  echo "  ${BOLD}OAuth / subscription login (no API key needed):${NC}"
+  echo "  6) GitHub Copilot (free with Copilot subscription)"
+  echo "  7) OpenAI Codex OAuth (ChatGPT subscription)"
+  echo "  8) Google Gemini CLI OAuth (Google account)"
+  echo "  9) Anthropic Claude setup-token (Max subscription)"
+  echo ""
+  echo "  0) Other / manual config"
+  echo ""
+  ask "Choose provider [0-9]"
   read -r PROVIDER_CHOICE
-  PROVIDER_CHOICE="${PROVIDER_CHOICE:-1}"
+  PROVIDER_CHOICE="${PROVIDER_CHOICE:-6}"
 
   case "$PROVIDER_CHOICE" in
     1)
-      LLM_PROVIDER="copilot"
-      info "Copilot proxy will be configured on localhost:4141"
-      info "Make sure copilot-api is running: npx copilot-api start --port 4141"
-      COPILOT_API_KEY="copilot-proxy-local"
-      ;;
-    2)
       LLM_PROVIDER="openai"
       ask "OpenAI API key (sk-...)"
       read -rs OPENAI_DIRECT_KEY
       echo ""
       ;;
-    3)
+    2)
       LLM_PROVIDER="anthropic"
       ask "Anthropic API key (sk-ant-...)"
       read -rs ANTHROPIC_KEY
       echo ""
       ;;
-    4)
+    3)
       LLM_PROVIDER="gemini"
       ask "Google Gemini API key"
       read -rs GEMINI_KEY
       echo ""
       info "Get a free key at https://aistudio.google.com/apikey"
       ;;
-    5)
+    4)
       LLM_PROVIDER="openrouter"
       ask "OpenRouter API key (sk-or-...)"
       read -rs OPENROUTER_KEY
       echo ""
       info "Browse models at https://openrouter.ai/models"
       ;;
-    6)
+    5)
       LLM_PROVIDER="kimi"
       ask "Moonshot/Kimi API key"
       read -rs KIMI_KEY
       echo ""
       info "Get a key at https://platform.moonshot.ai"
       ;;
+    6)
+      LLM_PROVIDER="copilot"
+      info "Copilot proxy will be configured on localhost:4141"
+      info "Make sure copilot-api is running: npx copilot-api start --port 4141"
+      COPILOT_API_KEY="copilot-proxy-local"
+      ;;
     7)
+      LLM_PROVIDER="openai-codex-oauth"
+      info "After setup completes, you'll authenticate via browser OAuth."
+      info "Requires an active ChatGPT Plus/Pro/Team subscription."
+      OAUTH_DEFERRED="openai-codex"
+      ;;
+    8)
+      LLM_PROVIDER="gemini-cli-oauth"
+      info "After setup completes, you'll authenticate via browser OAuth."
+      info "Uses your Google account — free tier available."
+      warn "Unofficial integration. Use a non-critical Google account."
+      OAUTH_DEFERRED="google-gemini-cli"
+      ;;
+    9)
+      LLM_PROVIDER="anthropic-oauth"
+      info "After setup completes, you'll authenticate via setup-token."
+      info "Requires Claude Max/Team subscription."
+      warn "Anthropic may restrict non-Claude usage. Check current terms."
+      OAUTH_DEFERRED="anthropic"
+      ;;
+    0)
       LLM_PROVIDER="manual"
       warn "You'll need to configure the model provider in openclaw.json manually"
       ;;
@@ -968,6 +996,17 @@ elif llm_provider == "kimi":
     }
     config['agents']['defaults']['model']['primary'] = "kimi/kimi-k2"
     config['agents']['defaults']['heartbeat']['model'] = "kimi/moonshot-v1-128k"
+elif llm_provider == "openai-codex-oauth":
+    # No provider config needed — built-in pi-ai catalog handles it
+    # OAuth login happens post-setup via openclaw models auth login
+    config['agents']['defaults']['model']['primary'] = "openai-codex/gpt-4o"
+elif llm_provider == "gemini-cli-oauth":
+    # OAuth login happens post-setup via openclaw models auth login
+    config['agents']['defaults']['model']['primary'] = "google-gemini-cli/gemini-2.5-pro"
+    config['agents']['defaults']['heartbeat']['model'] = "google-gemini-cli/gemini-2.5-flash"
+elif llm_provider == "anthropic-oauth":
+    # Setup-token login happens post-setup via openclaw models auth
+    config['agents']['defaults']['model']['primary'] = "anthropic/claude-sonnet-4-5-20250514"
 
 # Skills with keys
 if openai_skills_key:
@@ -1724,6 +1763,28 @@ show_summary() {
     echo "       tmux new-session -d -s copilot 'npx copilot-api start --port 4141'"
     echo ""
     STEP=$((STEP + 1))
+  elif [ "$LLM_PROVIDER" = "openai-codex-oauth" ]; then
+    if [ -z "${OAUTH_DEFERRED:-}" ]; then
+      echo "    $STEP. Authenticate with OpenAI Codex (if not done during setup):"
+      echo "       openclaw models auth login --provider openai-codex --set-default"
+      echo ""
+      STEP=$((STEP + 1))
+    fi
+  elif [ "$LLM_PROVIDER" = "gemini-cli-oauth" ]; then
+    if [ -z "${OAUTH_DEFERRED:-}" ]; then
+      echo "    $STEP. Authenticate with Gemini CLI (if not done during setup):"
+      echo "       openclaw plugins enable google-gemini-cli-auth"
+      echo "       openclaw models auth login --provider google-gemini-cli --set-default"
+      echo ""
+      STEP=$((STEP + 1))
+    fi
+  elif [ "$LLM_PROVIDER" = "anthropic-oauth" ]; then
+    if [ -z "${OAUTH_DEFERRED:-}" ]; then
+      echo "    $STEP. Authenticate with Anthropic (if not done during setup):"
+      echo "       openclaw models auth paste-token --provider anthropic"
+      echo ""
+      STEP=$((STEP + 1))
+    fi
   fi
 
   echo "    $STEP. Start OpenClaw:"
@@ -1737,14 +1798,27 @@ show_summary() {
   if [ "$USE_CONSOLE" = true ]; then
     echo ""
     echo "    $STEP. Start ClawSuite Console (web dashboard):"
-    echo "       cd ~/clawsuite && HOST=0.0.0.0 PORT=3000 node server-entry.js"
-    echo ""
-    echo "       Then open in your browser:"
-    echo "         • Local:  http://localhost:3000"
-    echo "         • Remote: http://YOUR-SERVER-IP:3000"
+    if [ "${CONSOLE_SECURITY:-1}" = "2" ] && [ -n "${CONSOLE_DOMAIN:-}" ]; then
+      echo "       cd ~/clawsuite && HOST=127.0.0.1 PORT=3000 node server-entry.js"
+      echo ""
+      echo "       Caddy handles SSL: https://$CONSOLE_DOMAIN"
+      echo "       Auth: $CONSOLE_AUTH_USER / [your password]"
+    elif [ "${CONSOLE_SECURITY:-1}" = "3" ]; then
+      echo "       cd ~/clawsuite && HOST=0.0.0.0 PORT=3000 node server-entry.js"
+      echo ""
+      echo "       Then open in your browser:"
+      echo "         • Local:  http://localhost:3000"
+      echo "         • Remote: http://YOUR-SERVER-IP:3000"
+    else
+      echo "       cd ~/clawsuite && HOST=127.0.0.1 PORT=3000 node server-entry.js"
+      echo ""
+      echo "       Access via SSH tunnel:"
+      echo "         ssh -L 3000:localhost:3000 user@your-server-ip"
+      echo "         Then open: http://localhost:3000"
+    fi
     echo ""
     echo "       To run it in the background:"
-    echo "       tmux new-session -d -s console 'cd ~/clawsuite && HOST=0.0.0.0 PORT=3000 node server-entry.js'"
+    echo "       tmux new-session -d -s console 'cd ~/clawsuite && HOST=${CONSOLE_HOST:-127.0.0.1} PORT=3000 node server-entry.js'"
     STEP=$((STEP + 1))
   fi
 
@@ -1875,8 +1949,106 @@ CONSOLEEOF
         && success "ClawSuite Console built successfully" \
         || warn "Build failed — run 'npm run build' manually in $CONSOLE_DIR"
 
+      # SSL + Security setup for ClawSuite Console
+      echo ""
+      echo -e "${BOLD}ClawSuite Console Security:${NC}"
+      echo ""
+      echo "  1) Localhost only (access via SSH tunnel — most secure)"
+      echo "  2) SSL with Caddy reverse proxy + basic auth (public HTTPS)"
+      echo "  3) No security (HTTP on all interfaces — dev only)"
+      echo ""
+      ask "Choose security mode [1/2/3] (default: 1)"
+      read -r CONSOLE_SECURITY
+      CONSOLE_SECURITY="${CONSOLE_SECURITY:-1}"
+
+      case "$CONSOLE_SECURITY" in
+        2)
+          # SSL with Caddy + basic auth
+          info "Setting up Caddy reverse proxy with SSL..."
+
+          # Install Caddy
+          if ! command -v caddy &>/dev/null; then
+            info "Installing Caddy web server..."
+            if command -v apt-get &>/dev/null; then
+              apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl 2>/dev/null
+              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null
+              curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
+              apt-get update -qq && apt-get install caddy -y -qq \
+                && success "Caddy installed" \
+                || warn "Could not install Caddy. Install manually: https://caddyserver.com/docs/install"
+            else
+              warn "Install Caddy manually: https://caddyserver.com/docs/install"
+            fi
+          fi
+
+          if command -v caddy &>/dev/null; then
+            ask "Domain name for SSL (e.g., agent.yourdomain.com)"
+            read -r CONSOLE_DOMAIN
+
+            ask "Basic auth username (default: admin)"
+            read -r CONSOLE_AUTH_USER
+            CONSOLE_AUTH_USER="${CONSOLE_AUTH_USER:-admin}"
+
+            ask "Basic auth password"
+            read -rs CONSOLE_AUTH_PASS
+            echo ""
+
+            # Hash the password for Caddy
+            CONSOLE_AUTH_HASH=$(caddy hash-password --plaintext "$CONSOLE_AUTH_PASS" 2>/dev/null)
+
+            if [ -n "$CONSOLE_AUTH_HASH" ] && [ -n "$CONSOLE_DOMAIN" ]; then
+              # Write Caddyfile
+              cat > /etc/caddy/Caddyfile << CADDYEOF
+${CONSOLE_DOMAIN} {
+    basicauth {
+        ${CONSOLE_AUTH_USER} ${CONSOLE_AUTH_HASH}
+    }
+    reverse_proxy 127.0.0.1:3000
+}
+CADDYEOF
+
+              # Restart Caddy
+              systemctl restart caddy 2>/dev/null \
+                || caddy start --config /etc/caddy/Caddyfile 2>/dev/null
+
+              success "Caddy configured: https://$CONSOLE_DOMAIN → ClawSuite Console"
+              info "Make sure your DNS A record points $CONSOLE_DOMAIN to this server's IP"
+              info "Auth: $CONSOLE_AUTH_USER / [your password]"
+
+              # Console should only listen on localhost now
+              CONSOLE_HOST="127.0.0.1"
+            else
+              warn "Could not configure Caddy. Set up manually."
+              CONSOLE_HOST="0.0.0.0"
+            fi
+          else
+            warn "Caddy not available. Falling back to localhost-only mode."
+            CONSOLE_HOST="127.0.0.1"
+          fi
+          ;;
+        3)
+          warn "Running without security — HTTP on all interfaces. Not recommended for production!"
+          CONSOLE_HOST="0.0.0.0"
+          ;;
+        *)
+          # Default: localhost only
+          CONSOLE_HOST="127.0.0.1"
+          info "Console will only be accessible via localhost (SSH tunnel recommended)"
+          info "Connect via: ssh -L 3000:localhost:3000 user@your-server-ip"
+          info "Then open: http://localhost:3000"
+          ;;
+      esac
+
       success "ClawSuite Console ready at $CONSOLE_DIR"
-      info "Start with: cd $CONSOLE_DIR && HOST=0.0.0.0 PORT=3000 node server-entry.js"
+      if [ "$CONSOLE_HOST" = "127.0.0.1" ] && [ "$CONSOLE_SECURITY" != "2" ]; then
+        info "Start with: cd $CONSOLE_DIR && HOST=127.0.0.1 PORT=3000 node server-entry.js"
+        info "Access via SSH tunnel: ssh -L 3000:localhost:3000 user@server-ip"
+      elif [ "${CONSOLE_DOMAIN:-}" ]; then
+        info "Start with: cd $CONSOLE_DIR && HOST=127.0.0.1 PORT=3000 node server-entry.js"
+        info "Access at: https://$CONSOLE_DOMAIN"
+      else
+        info "Start with: cd $CONSOLE_DIR && HOST=$CONSOLE_HOST PORT=3000 node server-entry.js"
+      fi
     fi
   fi
   echo ""
@@ -2017,6 +2189,51 @@ CONSOLEEOF
     success "Skills setup complete."
   else
     info "Skipped. Run later with: openclaw configure --section skills"
+  fi
+
+  # ---- OAuth / Deferred Auth Login ----
+  if [ -n "${OAUTH_DEFERRED:-}" ]; then
+    echo ""
+    echo -e "${GREEN}╔═══════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║${NC}  ${BOLD}🔐 LLM Provider Authentication${NC}               ${GREEN}║${NC}"
+    echo -e "${GREEN}╚═══════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    case "$OAUTH_DEFERRED" in
+      openai-codex)
+        info "Authenticating with OpenAI Codex OAuth..."
+        info "This will open a browser for ChatGPT login."
+        echo ""
+        openclaw models auth login --provider openai-codex --set-default 2>&1 || {
+          warn "OAuth login failed or was skipped."
+          info "Run later: openclaw models auth login --provider openai-codex --set-default"
+        }
+        ;;
+      google-gemini-cli)
+        info "Enabling Gemini CLI auth plugin..."
+        openclaw plugins enable google-gemini-cli-auth 2>/dev/null
+        echo ""
+        info "Authenticating with Google Gemini CLI OAuth..."
+        info "This will open a browser for Google account login."
+        echo ""
+        openclaw models auth login --provider google-gemini-cli --set-default 2>&1 || {
+          warn "OAuth login failed or was skipped."
+          info "Run later:"
+          info "  openclaw plugins enable google-gemini-cli-auth"
+          info "  openclaw models auth login --provider google-gemini-cli --set-default"
+        }
+        ;;
+      anthropic)
+        info "Authenticating with Anthropic setup-token..."
+        info "You'll need your Claude setup token from claude.ai/settings."
+        echo ""
+        openclaw models auth paste-token --provider anthropic 2>&1 || {
+          warn "Token setup failed or was skipped."
+          info "Run later: openclaw models auth paste-token --provider anthropic"
+        }
+        ;;
+    esac
+    echo ""
   fi
 
   show_summary
