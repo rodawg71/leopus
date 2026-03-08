@@ -1197,33 +1197,38 @@ install_graphthulhu() {
   local VAULT_DIR="$OPENCLAW_DIR/vault"
   mkdir -p "$VAULT_DIR"
 
-  # Try cargo install first, then check for pre-built binary
-  if command -v cargo &>/dev/null; then
-    info "Installing Graphthulhu via cargo..."
-    cargo install graphthulhu 2>&1 | tail -3 \
-      && success "Graphthulhu installed via cargo" \
-      || warn "Cargo install failed — trying binary download"
+  # Try go install first, then check for pre-built binary
+  if command -v go &>/dev/null; then
+    info "Installing Graphthulhu via go..."
+    go install github.com/skridlevsky/graphthulhu@latest 2>&1 | tail -3 \
+      && success "Graphthulhu installed via go" \
+      || warn "Go install failed — trying binary download"
   fi
 
   if ! command -v graphthulhu &>/dev/null; then
     # Try downloading pre-built binary from GitHub releases
     local ARCH
     ARCH=$(uname -m)
+    case "$ARCH" in
+      x86_64) ARCH="amd64" ;;
+      aarch64) ARCH="arm64" ;;
+    esac
     local OS
     OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
     info "Downloading Graphthulhu binary..."
-    local RELEASE_URL="https://github.com/scottozolmedia/graphthulhu/releases/latest/download/graphthulhu-${OS}-${ARCH}"
+    local RELEASE_URL="https://github.com/skridlevsky/graphthulhu/releases/download/v0.4.0/graphthulhu_0.4.0_${OS}_${ARCH}.tar.gz"
     local BIN_DIR="$HOME/.local/bin"
     mkdir -p "$BIN_DIR"
 
-    if curl -fsSL -o "$BIN_DIR/graphthulhu" "$RELEASE_URL" 2>/dev/null; then
-      chmod +x "$BIN_DIR/graphthulhu"
+    if curl -fsSL -o /tmp/graphthulhu.tar.gz "$RELEASE_URL" 2>/dev/null; then
+      (cd /tmp && tar xzf graphthulhu.tar.gz && mv graphthulhu "$BIN_DIR/" && chmod +x "$BIN_DIR/graphthulhu")
       success "Graphthulhu binary downloaded to $BIN_DIR/graphthulhu"
+      rm -f /tmp/graphthulhu.tar.gz
     else
       warn "Could not download Graphthulhu. Install manually:"
-      warn "  cargo install graphthulhu"
-      warn "  OR download from: https://github.com/scottozolmedia/graphthulhu/releases"
+      warn "  go install github.com/skridlevsky/graphthulhu@latest"
+      warn "  OR download from: https://github.com/skridlevsky/graphthulhu/releases"
       return
     fi
   fi
