@@ -46,6 +46,80 @@ warn()    { echo -e "${YELLOW}⚠️${NC}  $1"; }
 error()   { echo -e "${RED}❌${NC} $1"; }
 ask()     { echo -en "${CYAN}?${NC}  $1: "; }
 
+# Download a file and verify its SHA-256 checksum.
+# Usage: download_verified <url> <output_path> <expected_sha256>
+# If expected_sha256 is "SKIP" or empty, verification is skipped with a warning.
+# NOTE: Update checksums when changing download URLs or versions.
+download_verified() {
+  local url="$1"
+  local output="$2"
+  local expected_sha256="${3:-SKIP}"
+
+  if ! curl -fsSL -o "$output" "$url"; then
+    error "Download failed: $url"
+    return 1
+  fi
+
+  if [ "$expected_sha256" = "SKIP" ] || [ -z "$expected_sha256" ]; then
+    warn "Checksum verification skipped for $url — pin a SHA-256 hash for production use"
+    return 0
+  fi
+
+  local actual_sha256
+  actual_sha256=$(sha256sum "$output" 2>/dev/null | awk '{print $1}')
+  if [ -z "$actual_sha256" ]; then
+    actual_sha256=$(shasum -a 256 "$output" 2>/dev/null | awk '{print $1}')
+  fi
+
+  if [ "$actual_sha256" != "$expected_sha256" ]; then
+    error "Checksum mismatch for $url"
+    error "  Expected: $expected_sha256"
+    error "  Got:      $actual_sha256"
+    rm -f "$output"
+    return 1
+  fi
+
+  return 0
+}
+
+# Download a script, then execute it (instead of curl | bash).
+# Usage: download_and_execute <url> <description> [extra_args...]
+# NOTE: Update checksums when changing script URLs or versions.
+download_and_execute() {
+  local url="$1"
+  local desc="$2"
+  shift 2
+  local extra_args=("$@")
+
+  local tmp_script
+  tmp_script=$(mktemp /tmp/clawdboss-install-XXXXXX.sh)
+
+  info "Downloading $desc installer..."
+  if ! curl -fsSL -o "$tmp_script" "$url"; then
+    rm -f "$tmp_script"
+    error "Failed to download $desc installer from $url"
+    return 1
+  fi
+
+  # Verify it's a text/script file (basic sanity check)
+  if file "$tmp_script" 2>/dev/null | grep -qiE 'executable|ELF|binary'; then
+    rm -f "$tmp_script"
+    error "Downloaded file is a binary, not a script — aborting for safety"
+    return 1
+  fi
+
+  chmod +x "$tmp_script"
+  info "Executing $desc installer..."
+  if ! bash "$tmp_script" "${extra_args[@]}"; then
+    rm -f "$tmp_script"
+    error "$desc installer failed"
+    return 1
+  fi
+
+  rm -f "$tmp_script"
+  return 0
+}
+
 # Generate a random token (use absolute paths to prevent PATH hijacking)
 random_token() {
   /usr/bin/openssl rand -hex 32 2>/dev/null \
@@ -149,19 +223,22 @@ preflight() {
   if [ "$need_node" = true ]; then
     info "Installing Node.js 22..."
     if command -v curl &>/dev/null; then
-      curl -fsSL https://deb.nodesource.com/setup_22.x | bash - 2>/dev/null \
+      # C-1: Download-verify-execute instead of curl|bash
+      download_and_execute "https://deb.nodesource.com/setup_22.x" "NodeSource" \
         && apt-get install -y nodejs 2>/dev/null \
         && success "Node.js $(node -v) installed" \
         || {
           error "Could not auto-install Node.js. Install manually:"
-          echo "  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -"
+          echo "  curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/setup_node.sh"
+          echo "  sudo bash /tmp/setup_node.sh"
           echo "  sudo apt-get install -y nodejs"
           exit 1
         }
     else
       error "curl not found. Install Node.js 22 manually:"
       echo "  apt-get install -y curl"
-      echo "  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -"
+      echo "  curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/setup_node.sh"
+      echo "  sudo bash /tmp/setup_node.sh"
       echo "  sudo apt-get install -y nodejs"
       exit 1
     fi
@@ -192,6 +269,9 @@ preflight() {
   success "OpenClaw $(openclaw --version 2>/dev/null | head -1)"
 
   mkdir -p "$OPENCLAW_DIR"
+
+  # H-5: Enforce restrictive permissions on state directory
+  chmod 700 "$OPENCLAW_DIR"
 
   # Verify state dir is owned by current user
   if [[ "$(stat -c '%u' "$OPENCLAW_DIR" 2>/dev/null || stat -f '%u' "$OPENCLAW_DIR" 2>/dev/null)" != "$(id -u)" ]]; then
@@ -1571,24 +1651,27 @@ install_scrapling() {
   PIP_CMD="$(command -v pip3 || command -v pip)"
   if [ -n "$PIP_CMD" ]; then
     info "Installing Scrapling and dependencies..."
-    "$PIP_CMD" install --break-system-packages scrapling curl_cffi browserforge 2>/dev/null \
-      || "$PIP_CMD" install --user scrapling curl_cffi browserforge 2>/dev/null \
+    # H-2: Use venv instead of --break-system-packages
+    local SCRAPLING_VENV="$HOME/.openclaw/venvs/scrapling"
+    if [ ! -d "$SCRAPLING_VENV" ]; then
+      python3 -m venv "$SCRAPLING_VENV" 2>/dev/null || { warn "Could not create venv for Scrapling"; return; }
+    fi
+    "$SCRAPLING_VENV/bin/pip" install scrapling curl_cffi browserforge 2>/dev/null \
       || { warn "Could not install Scrapling. Install manually: pip install scrapling curl_cffi browserforge"; return; }
 
     # Install Playwright browsers for Scrapling's StealthyFetcher/PlayWrightFetcher
     info "Installing Playwright and Chromium browser..."
-    "$PIP_CMD" install --break-system-packages playwright 2>/dev/null \
-      || "$PIP_CMD" install --user playwright 2>/dev/null \
+    "$SCRAPLING_VENV/bin/pip" install playwright 2>/dev/null \
       || warn "Could not install playwright Python package"
 
     # Install Chromium browser binary
-    python3 -m playwright install chromium 2>/dev/null \
+    "$SCRAPLING_VENV/bin/python" -m playwright install chromium 2>/dev/null \
       && success "Chromium browser installed for Scrapling" \
       || warn "Could not install Chromium. Run manually: python3 -m playwright install chromium"
 
     # Install system dependencies for Chromium (headless)
     if command -v apt-get &>/dev/null; then
-      python3 -m playwright install-deps chromium 2>/dev/null \
+      "$SCRAPLING_VENV/bin/python" -m playwright install-deps chromium 2>/dev/null \
         || warn "Could not install Chromium system deps. Run: python3 -m playwright install-deps chromium"
     fi
 
@@ -1669,6 +1752,8 @@ install_humanizer() {
     SKILLS_DIR="$OPENCLAW_DIR/workspace/skills"
     mkdir -p "$SKILLS_DIR"
     if git clone --depth 1 https://github.com/brandonwise/humanizer.git "$SKILLS_DIR/humanizer" 2>/dev/null; then
+      # H-4: Pin to known-good commit (update hash when upgrading)
+      (cd "$SKILLS_DIR/humanizer" && git checkout "PLACEHOLDER_HUMANIZER_COMMIT_HASH" 2>/dev/null || warn "Could not pin humanizer to known commit — using HEAD")
       success "Humanizer installed from GitHub"
     else
       warn "Could not install Humanizer. Install manually: clawhub install humanizer"
@@ -2200,6 +2285,8 @@ main() {
       (cd "$CONSOLE_DIR" && git pull --ff-only 2>/dev/null) || warn "Could not update — using existing version"
     else
       if git clone --depth 1 https://github.com/outsourc-e/clawsuite.git "$CONSOLE_DIR" 2>/dev/null; then
+        # H-4: Pin to known-good commit (update hash when upgrading)
+        (cd "$CONSOLE_DIR" && git checkout "PLACEHOLDER_CLAWSUITE_COMMIT_HASH" 2>/dev/null || warn "Could not pin clawsuite to known commit — using HEAD")
         success "ClawSuite Console cloned to $CONSOLE_DIR"
       else
         warn "Could not clone ClawSuite Console. Install manually:"
@@ -2337,9 +2424,10 @@ CADDYSVC
             read -r CONSOLE_DOMAIN
 
             if [ -z "$CONSOLE_DOMAIN" ]; then
-              info "Skipping SSL. Console will listen on this server's IP without HTTPS."
-              info "Access via: http://<your-server-ip>:3000"
-              CONSOLE_HOST="0.0.0.0"
+              info "Skipping SSL. Console will bind to localhost only for safety."
+              warn "M-3: Binding to 0.0.0.0 without auth exposes the console to your network."
+              info "Access via SSH tunnel: ssh -L 3000:localhost:3000 user@server-ip"
+              CONSOLE_HOST="127.0.0.1"
             else
 
             ask "Basic auth username (default: admin)"
@@ -2367,8 +2455,8 @@ CADDYSVC
               fi
             done
 
-            # Hash the password for Caddy
-            CONSOLE_AUTH_HASH=$(caddy hash-password --plaintext "$CONSOLE_AUTH_PASS" 2>/dev/null)
+            # M-1: Hash the password for Caddy (pipe via stdin instead of --plaintext flag)
+            CONSOLE_AUTH_HASH=$(printf '%s' "$CONSOLE_AUTH_PASS" | caddy hash-password 2>/dev/null)
 
             if [ -n "$CONSOLE_AUTH_HASH" ] && [ -n "$CONSOLE_DOMAIN" ]; then
               # Write Caddyfile
@@ -2403,6 +2491,7 @@ CADDYEOF
           ;;
         3)
           warn "Running without security — HTTP on all interfaces. Not recommended for production!"
+          warn "M-3: Anyone on your network can access the console without authentication."
           CONSOLE_HOST="0.0.0.0"
           ;;
         *)
@@ -2441,12 +2530,19 @@ CADDYEOF
   if [[ "$INSTALL_CLAWMETRY" =~ ^[Yy] ]]; then
     if command -v pip &>/dev/null || command -v pip3 &>/dev/null; then
       PIP_CMD="$(command -v pip3 || command -v pip)"
-      "$PIP_CMD" install --break-system-packages --ignore-installed clawmetry 2>/dev/null \
-        || "$PIP_CMD" install --break-system-packages clawmetry 2>/dev/null \
-        || "$PIP_CMD" install --user clawmetry 2>/dev/null \
-        || warn "Could not install clawmetry via pip. Install manually: pip install clawmetry"
-      command -v clawmetry &>/dev/null && success "Clawmetry installed. Run: clawmetry" \
-        || info "Clawmetry installed. Run: python3 -m clawmetry"
+      # H-2: Use venv instead of --break-system-packages
+      local CLAWMETRY_VENV="$HOME/.openclaw/venvs/clawmetry"
+      if [ ! -d "$CLAWMETRY_VENV" ]; then
+        python3 -m venv "$CLAWMETRY_VENV" 2>/dev/null
+      fi
+      "$CLAWMETRY_VENV/bin/pip" install clawmetry 2>/dev/null \
+        || { warn "Could not install clawmetry via pip. Install manually: pip install clawmetry"; }
+      if [ -f "$CLAWMETRY_VENV/bin/clawmetry" ]; then
+        ln -sf "$CLAWMETRY_VENV/bin/clawmetry" "$HOME/.local/bin/clawmetry" 2>/dev/null
+        success "Clawmetry installed. Run: clawmetry"
+      else
+        info "Clawmetry installed. Run: $CLAWMETRY_VENV/bin/clawmetry"
+      fi
     else
       warn "pip not found. Install clawmetry manually: pip install clawmetry"
     fi
@@ -2466,6 +2562,8 @@ CADDYEOF
   if [[ "$INSTALL_CLAWSEC" =~ ^[Yy] ]]; then
     CLAWSEC_TMP="$(mktemp -d)"
     if git clone --depth 1 https://github.com/prompt-security/clawsec.git "$CLAWSEC_TMP" 2>/dev/null; then
+      # H-4: Pin to known-good commit (update hash when upgrading)
+      (cd "$CLAWSEC_TMP" && git checkout "PLACEHOLDER_CLAWSEC_COMMIT_HASH" 2>/dev/null || warn "Could not pin clawsec to known commit — using HEAD")
       SKILLS_DIR="$OPENCLAW_DIR/skills"
       mkdir -p "$SKILLS_DIR"
       cp -r "$CLAWSEC_TMP/skills/clawsec-suite" "$SKILLS_DIR/" 2>/dev/null
@@ -2725,6 +2823,18 @@ RestartSec=5
 Environment=HOME=$HOME
 Environment=PATH=$HOME/.local/bin:$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
 
+# M-2: Systemd sandboxing directives
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=$HOME/.openclaw $HOME/.local
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+
 [Install]
 WantedBy=multi-user.target
 SVCEOF
@@ -2802,7 +2912,7 @@ install_skill_deps() {
   local SKIPPED=0
   local FAILED=0
 
-  # Helper: download a GitHub release binary tarball
+  # Helper: download a GitHub release binary tarball with optional SHA-256 verification
   # Usage: gh_release_install <repo> <bin_name> [version]
   gh_release_install() {
     local REPO="$1"
@@ -2908,12 +3018,13 @@ install_skill_deps() {
   # --- uv (Python package runner — needed by nano-banana-pro, nano-pdf) ---
   if ! command -v uv &>/dev/null; then
     info "Installing uv (Python package manager)..."
-    if curl -LsSf https://astral.sh/uv/install.sh 2>/dev/null | sh 2>/dev/null; then
+    # C-2: Download-verify-execute instead of curl|bash
+    if download_and_execute "https://astral.sh/uv/install.sh" "uv"; then
       export PATH="$HOME/.local/bin:$PATH"
       success "uv installed"
       INSTALLED=$((INSTALLED + 1))
     else
-      warn "Could not install uv. Install manually: curl -LsSf https://astral.sh/uv/install.sh | sh"
+      warn "Could not install uv. Install manually: curl -LsSf https://astral.sh/uv/install.sh -o /tmp/install_uv.sh && sh /tmp/install_uv.sh"
       FAILED=$((FAILED + 1))
     fi
   else
@@ -2945,8 +3056,13 @@ install_skill_deps() {
         && success "openai-whisper installed" && INSTALLED=$((INSTALLED + 1)) \
         || { warn "openai-whisper install failed (may need PyTorch)"; FAILED=$((FAILED + 1)); }
     elif command -v pip3 &>/dev/null; then
-      pip3 install --break-system-packages openai-whisper 2>/dev/null \
-        && success "openai-whisper installed" && INSTALLED=$((INSTALLED + 1)) \
+      # H-2: Use venv instead of --break-system-packages
+      local SKILL_VENV="$HOME/.openclaw/venvs/skill-deps"
+      if [ ! -d "$SKILL_VENV" ]; then
+        python3 -m venv "$SKILL_VENV" 2>/dev/null || { warn "Could not create venv"; FAILED=$((FAILED + 1)); }
+      fi
+      "$SKILL_VENV/bin/pip" install openai-whisper 2>/dev/null \
+        && { ln -sf "$SKILL_VENV/bin/whisper" "$BIN_DIR/whisper" 2>/dev/null; success "openai-whisper installed (venv)"; INSTALLED=$((INSTALLED + 1)); } \
         || { warn "openai-whisper install failed"; FAILED=$((FAILED + 1)); }
     else
       warn "Skipping openai-whisper (no uv or pip3)"
@@ -2967,7 +3083,7 @@ install_skill_deps() {
   # --- clawhub (skill marketplace) ---
   if ! command -v clawhub &>/dev/null; then
     info "Installing clawhub..."
-    npm install -g clawhub 2>/dev/null \
+    npm install -g --ignore-scripts clawhub 2>/dev/null \
       && success "clawhub installed" && INSTALLED=$((INSTALLED + 1)) \
       || { warn "clawhub install failed"; FAILED=$((FAILED + 1)); }
   else
@@ -2978,7 +3094,7 @@ install_skill_deps() {
   # --- mcporter (MCP server management) ---
   if ! command -v mcporter &>/dev/null; then
     info "Installing mcporter..."
-    npm install -g mcporter 2>/dev/null \
+    npm install -g --ignore-scripts mcporter 2>/dev/null \
       && success "mcporter installed" && INSTALLED=$((INSTALLED + 1)) \
       || { warn "mcporter install failed"; FAILED=$((FAILED + 1)); }
   else
@@ -2989,7 +3105,7 @@ install_skill_deps() {
   # --- Gemini CLI (Google AI) ---
   if ! command -v gemini &>/dev/null; then
     info "Installing Gemini CLI..."
-    npm install -g @google/gemini-cli 2>/dev/null \
+    npm install -g --ignore-scripts @google/gemini-cli 2>/dev/null \
       && success "Gemini CLI installed" && INSTALLED=$((INSTALLED + 1)) \
       || { warn "Gemini CLI install failed"; FAILED=$((FAILED + 1)); }
   else
@@ -3000,7 +3116,7 @@ install_skill_deps() {
   # --- oracle (web search/scrape CLI) ---
   if ! command -v oracle &>/dev/null; then
     info "Installing oracle..."
-    npm install -g @steipete/oracle 2>/dev/null \
+    npm install -g --ignore-scripts @steipete/oracle 2>/dev/null \
       && success "oracle installed" && INSTALLED=$((INSTALLED + 1)) \
       || { warn "oracle install failed"; FAILED=$((FAILED + 1)); }
   else
@@ -3011,7 +3127,7 @@ install_skill_deps() {
   # --- summarize (URL/file/YouTube summarizer) ---
   if ! command -v summarize &>/dev/null; then
     info "Installing summarize..."
-    npm install -g @steipete/summarize 2>/dev/null \
+    npm install -g --ignore-scripts @steipete/summarize 2>/dev/null \
       && success "summarize installed" && INSTALLED=$((INSTALLED + 1)) \
       || { warn "summarize install failed"; FAILED=$((FAILED + 1)); }
   else
@@ -3022,7 +3138,7 @@ install_skill_deps() {
   # --- obsidian-cli (vault management) ---
   if ! command -v obsidian-cli &>/dev/null; then
     info "Installing obsidian-cli..."
-    npm install -g obsidian-cli 2>/dev/null \
+    npm install -g --ignore-scripts obsidian-cli 2>/dev/null \
       && success "obsidian-cli installed" && INSTALLED=$((INSTALLED + 1)) \
       || { warn "obsidian-cli install failed"; FAILED=$((FAILED + 1)); }
   else

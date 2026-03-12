@@ -64,7 +64,8 @@ class FactsDB {
   private db: Database.Database;
 
   constructor(dbPath: string) {
-    mkdirSync(dirname(dbPath), { recursive: true });
+    // M-6: Enforce restrictive permissions on database directory
+    mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 });
     this.db = new Database(dbPath);
 
     // Enable WAL mode for better concurrent read performance
@@ -248,6 +249,9 @@ class FactsDB {
 
     const safeQuery = query
       .replace(/['"]/g, "")
+      // L-5: Strip FTS5 operators to prevent query injection
+      .replace(/\b(AND|OR|NOT|NEAR)\b/gi, "")
+      .replace(/[*{}()\[\]^~:]/g, "")
       .split(/\s+/)
       .filter((w) => w.length > 1)
       .map((w) => `"${w}"`)
@@ -466,7 +470,17 @@ class FactsDB {
 
     if (!row) return null;
     try {
-      return { id: row.id, ...JSON.parse(row.text) };
+      // L-7: Destructure only expected fields to prevent prototype pollution
+      // or unexpected property injection from stored JSON data
+      const parsed = JSON.parse(row.text);
+      return {
+        id: row.id,
+        intent: parsed.intent ?? "",
+        state: parsed.state ?? "",
+        expectedOutcome: parsed.expectedOutcome,
+        workingFiles: Array.isArray(parsed.workingFiles) ? parsed.workingFiles : undefined,
+        savedAt: parsed.savedAt ?? "",
+      };
     } catch {
       return null;
     }
@@ -623,6 +637,9 @@ class VectorDB {
 
   async delete(id: string): Promise<boolean> {
     await this.ensureInitialized();
+    // L-6: UUID regex validation is an intentional security control to prevent
+    // SQL/filter injection via the LanceDB delete() method, which accepts a
+    // string predicate. Without this, a crafted "id" could manipulate the query.
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(id)) throw new Error(`Invalid ID: ${id}`);
@@ -853,6 +870,14 @@ const SENSITIVE_PATTERNS = [
   /token\s+is/i,
   /\bssn\b/i,
   /credit.?card/i,
+  /bearer\s+[a-z0-9]/i,
+  /private.?key/i,
+  /connection.?string/i,
+  /\baws.?secret/i,
+  /-----BEGIN\s+(RSA|EC|DSA|OPENSSH)?\s*PRIVATE\s+KEY/i,
+  /ghp_[a-zA-Z0-9]{36}/,
+  /sk-[a-zA-Z0-9]{20,}/,
+  /sk-ant-[a-zA-Z0-9-]{20,}/,
 ];
 
 function shouldCapture(text: string): boolean {
