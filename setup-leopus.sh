@@ -5,7 +5,7 @@ umask 077
 # ============================================================
 # LeOpus Edition — One-Command OpenClaw Setup
 # Only input: Telegram bot token
-# LLM: Ollama + Qwen3 8B (free, local, zero cost)
+# LLM: Ollama + Qwen2.5 7B (free, local, zero cost)
 # ============================================================
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -58,7 +58,7 @@ check_hardware() {
   fi
 
   if [ "$ram_gb" -lt 16 ]; then
-    die "Need at least 16GB RAM (found ${ram_gb}GB). Qwen3 8B needs ~6GB for the model + headroom."
+    die "Need at least 16GB RAM (found ${ram_gb}GB). Qwen2.5 7B needs ~6GB for the model + headroom."
   elif [ "$ram_gb" -lt 32 ]; then
     warn "Found ${ram_gb}GB RAM. Will work, but 32GB+ recommended for best performance."
   else
@@ -150,15 +150,15 @@ install_ollama() {
   success "Ollama running"
 
   # Pull model
-  if ollama list 2>/dev/null | grep -q "qwen3:8b"; then
-    success "Qwen3 8B already downloaded"
+  if ollama list 2>/dev/null | grep -q "qwen2.5:7b"; then
+    success "Qwen2.5 7B already downloaded"
   else
     echo ""
-    info "Downloading Qwen3 8B (~5GB one-time download)..."
+    info "Downloading Qwen2.5 7B (~5GB one-time download)..."
     info "This is your AI brain. It runs 100% locally — no API key, no cost, ever."
     echo ""
-    ollama pull qwen3:8b
-    success "Qwen3 8B ready"
+    ollama pull qwen2.5:7b
+    success "Qwen2.5 7B ready"
   fi
 }
 
@@ -283,7 +283,7 @@ SESSEOF
 
 ## Quick Status
 - **Agent**: LeOpus 🦁
-- **LLM**: Qwen3 8B (local, via Ollama)
+- **LLM**: Qwen2.5 7B (local, via Ollama)
 - **Channel**: Telegram
 
 ## Drill-Down Directories
@@ -336,7 +336,7 @@ start_and_verify() {
   echo -e "  ${BOLD}🦁 LeOpus is alive!${NC}"
   echo ""
   echo -e "  Open Telegram and send a message to your bot."
-  echo -e "  It's running Qwen3 8B locally — no API costs, ever."
+  echo -e "  It's running Qwen2.5 7B locally — no API costs, ever."
   echo ""
   echo -e "  ${BOLD}Useful commands:${NC}"
   echo -e "    openclaw gateway status    — check if running"
@@ -370,7 +370,7 @@ main() {
   install_deps
   echo ""
 
-  echo -e "  ${BOLD}Step 3/6${NC} — Ollama + Qwen3 8B"
+  echo -e "  ${BOLD}Step 3/6${NC} — Ollama + Qwen2.5 7B"
   install_ollama
   echo ""
 

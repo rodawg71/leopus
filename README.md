@@ -16,7 +16,7 @@ task lifecycle management, and execution discipline — running entirely on loca
 ## What You Get
 
 - **5-agent hierarchy** — Main orchestrator + Builder, Scout, Operator, Analyst
-- **Local LLM** — Qwen3 8B via Ollama. No API keys. No monthly bills. Ever.
+- **Local LLM** — Qwen2.5 7B via Ollama. No API keys. No monthly bills. Ever.
 - **Telegram interface** — Talk to your AI from your phone
 - **Task lifecycle** — Every multi-step job gets tracked, checkpointed, and verified
 - **Compaction survival** — Agent recovers context after memory resets
@@ -44,7 +44,7 @@ The installer handles everything:
 
 1. **Hardware check** — validates RAM and detects GPU
 2. **Node.js** — installs v22+ if missing
-3. **Ollama** — installs and pulls Qwen3 8B (~5GB download)
+3. **Ollama** — installs and pulls Qwen2.5 7B (~5GB download)
 4. **OpenClaw** — installs via npm
 5. **Your token** — paste your Telegram bot token (the only input)
 6. **Deploy** — copies configs, generates secrets, starts the gateway
@@ -113,7 +113,7 @@ built from months of real-world usage:
 
 ### Change the LLM
 
-Edit `~/.openclaw/openclaw.json` — swap `qwen3:8b` for any Ollama model:
+Edit `~/.openclaw/openclaw.json` — swap `qwen2.5:7b` for any Ollama model:
 
 ```bash
 ollama pull llama3:8b          # Meta Llama 3
@@ -140,11 +140,11 @@ Want a friendlier assistant? A stricter one? A pirate? Change the file.
 ## FAQ
 
 **Q: Is this really free?**
-Yes. Ollama is open source. Qwen3 is open weight. OpenClaw is open source.
+Yes. Ollama is open source. Qwen2.5 is open weight. OpenClaw is open source.
 The only cost is the electricity to run your machine.
 
 **Q: How much VRAM does it need?**
-Qwen3 8B needs ~5GB. Works on most NVIDIA cards (GTX 1060+) and all Apple Silicon.
+Qwen2.5 7B needs ~5GB. Works on most NVIDIA cards (GTX 1060+) and all Apple Silicon.
 CPU-only works too, just slower.
 
 **Q: Can I use a cloud LLM instead?**
