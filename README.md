@@ -1,245 +1,166 @@
-# 🦞 Clawdboss
+<div align="center">
 
-**Pre-hardened, multi-agent OpenClaw setup by NanoFlow.**
+# 🦁 LeOpus
 
-One script to go from zero to a fully secured, multi-agent AI assistant on Discord — with prompt injection defense, security auditing, WAL Protocol for context persistence, and best practices baked in.
+**Battle-tested AI assistant. One command. One token. Zero cost.**
+
+A pre-configured [OpenClaw](https://github.com/openclaw/openclaw) setup with a 5-agent hierarchy,
+task lifecycle management, and execution discipline — running entirely on local hardware.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+</div>
+
+---
 
 ## What You Get
 
-- **Multi-agent architecture** — Main agent + optional specialist agents (Comms, Research, Security)
-- **Security-first** — Prompt injection defense, anti-loop rules, content tagging, credential isolation
-- **WAL Protocol** — Write-Ahead Log for corrections, decisions, and details that survive context loss
-- **Working Buffer** — Danger zone logging to survive context compaction without losing work
-- **Discord integration** — Bot bound to your server with channel-per-agent routing
-- **Telegram integration** — Chat via Telegram bot with DM and group support
-- **Web dashboard** — ClawSuite Console with chat, file browser, terminal, cost analytics (optional)
-- **Env-based secrets** — All API keys in `.env`, never in config files
-- **Automated security audits** — Security agent runs scheduled hardening checks
-- **Knowledge graph** — Graphthulhu for structured memory across agents (optional)
-- **API discovery** — ApiTap intercepts web traffic to teach agents how APIs work (optional)
-- **Web scraping** — Scrapling for anti-bot-bypassing data extraction (optional)
-- **Browser automation** — Playwright MCP for full GUI workflows (optional)
-- **GitHub integration** — Issues, PRs, CI/CD via `gh` CLI (optional)
-- **Token compression** — OCTAVE protocol for 3-20x compression in multi-agent handoffs (optional)
-- **Observability** — Clawmetry dashboard for token costs, sessions, live message flow (optional)
-- **Security suite** — ClawSec for file integrity, advisory feed, malicious skill detection (optional)
-- **AI text humanizer** — Humanizer detects and removes AI writing patterns (optional)
-- **Continuous learning** — Self-Improving Agent captures errors and lessons across sessions (optional)
-- **Skill discovery** — Find Skills helps agents install new capabilities on-the-fly (optional)
-- **Marketing toolkit** — 15+ marketing reference skills for copywriting, CRO, SEO, and more (optional)
-- **Host hardening** — Healthcheck audits firewall, SSH, updates, and exposure (optional)
-
-## Quick Start
-
-### Ubuntu VPS (Fresh Install)
-
-SSH into your server and run:
-
-```bash
-# 1. Clone Clawdboss
-apt-get update && apt-get install -y git
-git clone https://github.com/NanoFlow-io/clawdboss.git
-cd clawdboss
-
-# 2. Run the setup wizard (auto-installs Node.js 22, Python, build tools, OpenClaw)
-./setup.sh
-```
-
-That's it. The wizard auto-installs all dependencies (Node.js 22, Python, git, build-essential, OpenClaw) and walks you through everything else.
-
-### What You'll Need Ready
-
-- **An LLM provider** — one of:
-  - [GitHub Copilot](https://github.com/features/copilot) subscription (cheapest — uses copilot-api proxy)
-  - [OpenAI API key](https://platform.openai.com/api-keys) (sk-...)
-  - [Anthropic API key](https://console.anthropic.com/) (sk-ant-...)
-- **A Discord bot token** — [create one here](https://discord.com/developers/applications) (if using Discord interface)
-- **A Telegram bot token** — [create one via @BotFather](https://t.me/BotFather) (if using Telegram interface)
-- **Optional:** Brave Search API key, ElevenLabs API key, OpenAI key for image gen/whisper
-
-The setup wizard will:
-1. Ask about **you** — name, role, what you do, how you want to use your agent
-2. Ask about **your agent** — name, personality, mission, domain expertise
-3. Prompt for your API keys and Discord/Telegram credentials
-4. Create your `.env` file (gitignored, never committed)
-5. Generate `openclaw.json` with `${VAR}` references to your `.env`
-6. Create agent workspaces with security rules + WAL Protocol pre-baked
-7. Offer optional tools: Graphthulhu, ApiTap, Scrapling, GitHub, Playwright, OCTAVE, Humanizer, Self-Improving Agent, Find Skills, Marketing Skills, Healthcheck, Clawmetry, ClawSec
-8. Run OpenClaw's built-in skills wizard (Whisper, Nano Banana Pro, mcporter, TTS, email, etc.)
-9. Start the gateway
-
-Your agent starts its first session knowing who you are, what you do, and what personality it should have — zero manual config file editing needed.
-
-## Configuration Tiers
-
-| Tier | Agents | Best For |
-|------|--------|----------|
-| **Solo** | Main only | Personal assistant, simple setups |
-| **Team** | Main + 1-2 specialists | Small business, multiple workflows |
-| **Full Squad** | Main + Comms + Research + Security | Full operations center |
-
-## File Structure
-
-```
-clawdboss/
-├── README.md
-├── setup.sh                    # Interactive setup wizard
-├── .env.example                # Template showing required variables
-├── .gitignore                  # Protects secrets
-├── templates/
-│   ├── openclaw.template.json  # Config with ${VAR} placeholders
-│   ├── workspace/              # Main agent workspace files
-│   │   ├── AGENTS.md           # Operating rules + WAL Protocol + security
-│   │   ├── SOUL.md
-│   │   ├── USER.md
-│   │   ├── TOOLS.md
-│   │   ├── IDENTITY.md
-│   │   └── HEARTBEAT.md
-│   └── agents/                 # Specialist agent templates
-│       ├── comms/
-│       ├── research/
-│       └── security/
-└── docs/
-    ├── security.md             # Security architecture + WAL Protocol overview
-    ├── customization.md        # How to customize your setup
-    ├── recommended-tools.md    # Vetted ecosystem tools (Clawmetry, ClawSec)
-    └── octave.md               # OCTAVE protocol guide
-```
-
-## Interface Options
-
-During setup, choose your preferred interface:
-
-| Option | Best For |
-|--------|----------|
-| **Discord** | Power users who live in Discord. Channel-per-agent, reactions, threads. |
-| **Telegram** | Mobile-first. DM your bot or use group topics for multi-agent routing. |
-| **ClawSuite Console** | Visual dashboard with chat, file browser, terminal, cost analytics. Great for non-technical users. |
-| **Any combination** | Mix and match — Discord + Telegram, Discord + Console, all three, etc. |
-
-ClawSuite Console is an open-source web dashboard — see [ClawSuite on GitHub](https://github.com/outsourc-e/clawsuite) (MIT license).
-
-## Context Persistence (WAL Protocol + 3-Layer Memory)
-
-Clawdboss agents don't lose your corrections and decisions when context resets:
-
-- **3-Layer Memory** — L1 (Brain, loaded every turn) → L2 (Memory, searched semantically) → L3 (Reference, opened on demand)
-- **L1 File Budget** — 500-1,000 tokens per workspace file to prevent agents from skimming
-- **SESSION-STATE.md** — Agent writes important details here BEFORE responding (Write-Ahead Log)
-- **Working Buffer** — At ~60% context, every exchange is logged to survive compaction
-- **Compaction Recovery** — Agent reads buffer + state files after context loss, never asks "what were we doing?"
-- **Breadcrumbs** — Topic-organized files in `memory/` that point to deep reference docs
-- **Trim** — Weekly maintenance to keep L1 files lean, move excess to L2/L3
-- **Recalibrate** — Drift correction, forces re-read of all files and behavior comparison
-
-See [docs/security.md](docs/security.md) for the full architecture.
-
-## Security
-
-All API keys are stored in `~/.openclaw/.env` and referenced via `${VAR_NAME}` syntax in the config. Keys never appear in JSON config files.
-
-All agents come with:
-- Prompt injection defense (content isolation, pattern detection)
-- Anti-loop rules (prevent token-burning attacks)
-- External content security (emails, web pages treated as data-only)
-- Relentless resourcefulness + VBR (Verify Before Reporting)
-
-See [docs/security.md](docs/security.md) for the full security architecture.
-
-## Recommended Ecosystem Tools
-
-The setup wizard offers each of these individually. All are free and open-source:
-
-| Tool | Purpose | Install Method |
-|------|---------|---------------|
-| **[Graphthulhu](https://github.com/skridlevsky/graphthulhu)** | Knowledge graph memory (entities, relationships, constraints) | Binary / cargo |
-| **[ApiTap](https://www.npmjs.com/package/@apitap/core)** | API discovery — intercepts web traffic, generates skill files | `npm install -g @apitap/core` |
-| **[Scrapling](https://github.com/D4Vinci/Scrapling)** | Anti-bot web scraping with adaptive selectors | `pip install scrapling` |
-| **[Playwright MCP](https://clawhub.com/playwright-mcp)** | Full browser automation (navigate, click, fill, screenshot) | `clawhub install` |
-| **[GitHub](https://cli.github.com)** | Issues, PRs, CI/CD via `gh` CLI | `clawhub install` + `gh` CLI |
-| **[OCTAVE](https://pypi.org/project/octave-mcp/)** | 3-20x token compression for multi-agent handoffs | `pip install octave-mcp` |
-| **[Clawmetry](https://clawmetry.com)** | Real-time observability dashboard (costs, sessions, flow) | `pip install clawmetry` |
-| **[ClawSec](https://github.com/prompt-security/clawsec)** | File integrity, advisory feed, malicious skill detection | Git clone |
-| **[Humanizer](https://github.com/brandonwise/humanizer)** | Detect and remove AI writing patterns (24 patterns, 500+ terms) | `clawhub install` |
-| **Self-Improving Agent** | Capture errors, corrections, and lessons for continuous learning | `clawhub install` |
-| **Find Skills** | Discover and install new skills on-the-fly from ClawHub | `clawhub install` |
-| **Marketing Skills** | 15+ marketing reference skills (copywriting, CRO, SEO, email, ads) | `clawhub install` |
-| **Healthcheck** | Host security audits: firewall, SSH, updates, exposure | Built-in |
-| **[fail2ban](https://github.com/fail2ban/fail2ban)** | Brute-force protection — auto-bans malicious IPs | `apt install fail2ban` |
-
-See [docs/recommended-tools.md](docs/recommended-tools.md) for detailed install guides.
-
-## After Install — Getting Your Agent Running
-
-Once the wizard finishes, follow the next steps it shows:
-
-### 1. Start the LLM Provider
-
-**GitHub Copilot (proxy):**
-```bash
-# First run — shows a device auth URL + code. Open the URL, enter the code,
-# authorize with a GitHub account that has an active Copilot subscription ($10/mo).
-npx copilot-api start --port 4141
-
-# Run in background (recommended):
-tmux new-session -d -s copilot 'npx copilot-api start --port 4141'
-```
-
-**OpenAI / Anthropic:** No proxy needed — your API key is already in `.env`.
-
-### 2. Start OpenClaw
-
-```bash
-openclaw gateway start
-openclaw status       # Verify everything is running
-```
-
-### 3. Start ClawSuite Console (if selected)
-
-```bash
-cd ~/clawsuite && HOST=0.0.0.0 PORT=3000 node server-entry.js
-
-# Run in background:
-tmux new-session -d -s console 'cd ~/clawsuite && HOST=0.0.0.0 PORT=3000 node server-entry.js'
-```
-
-Then open in your browser:
-- **Local:** `http://localhost:3000`
-- **Remote/VPS:** `http://YOUR-SERVER-IP:3000`
-
-### 4. Chat with Your Agent
-
-- **Discord:** Open the channel you configured and send a message
-- **ClawSuite Console:** Use the chat panel in the web dashboard
-- **Both:** Use either — they connect to the same agent
-
-## Memory System (Hybrid Plugin)
-
-Clawdboss includes a custom **memory-hybrid plugin** that gives your agent two-tier persistent memory:
-
-- **SQLite + FTS5** — Structured facts with full-text search. Instant, zero API cost. Stores entities, preferences, decisions with auto-expiry and confidence decay.
-- **LanceDB** — Semantic vector search for fuzzy/contextual recall. Uses OpenAI embeddings (`text-embedding-3-small`).
-
-Both backends are queried in parallel, results merged and deduplicated. The agent gets `memory_store`, `memory_recall`, `memory_forget`, `memory_checkpoint`, and `memory_prune` tools automatically.
-
-**Requires:** An OpenAI API key for embeddings (set `EMBEDDING_API_KEY` in your `.env`).
-
-**CLI commands:**
-```bash
-openclaw hybrid-mem stats           # Show memory statistics
-openclaw hybrid-mem search "query"  # Search across both backends
-openclaw hybrid-mem prune           # Remove expired memories
-```
+- **5-agent hierarchy** — Main orchestrator + Builder, Scout, Operator, Analyst
+- **Local LLM** — Qwen3 8B via Ollama. No API keys. No monthly bills. Ever.
+- **Telegram interface** — Talk to your AI from your phone
+- **Task lifecycle** — Every multi-step job gets tracked, checkpointed, and verified
+- **Compaction survival** — Agent recovers context after memory resets
+- **Heartbeat monitoring** — Periodic system health checks
+- **Execution discipline** — No hallucinated completions. Proof or it didn't happen.
 
 ## Requirements
 
-- Ubuntu 22.04+ (or any Linux with bash)
-- Node.js 22+ (setup wizard installs OpenClaw automatically)
-- 2GB+ RAM recommended (1GB works for Solo tier)
-- A Discord bot token ([create one here](https://discord.com/developers/applications)) and/or Telegram bot token (from [@BotFather](https://t.me/BotFather))
-- An LLM provider (GitHub Copilot, OpenAI, Anthropic, or others)
-- Optional: Brave Search API key, ElevenLabs API key
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| RAM | 16 GB | 32 GB+ |
+| GPU | None (CPU works) | NVIDIA or Apple Silicon |
+| OS | macOS or Ubuntu/Debian | Any with bash + Node.js |
+| Disk | 10 GB free | 20 GB free |
+
+## Quick Start
+
+```bash
+git clone https://github.com/rodawg71/leopus.git
+cd leopus
+./setup-leopus.sh
+```
+
+The installer handles everything:
+
+1. **Hardware check** — validates RAM and detects GPU
+2. **Node.js** — installs v22+ if missing
+3. **Ollama** — installs and pulls Qwen3 8B (~5GB download)
+4. **OpenClaw** — installs via npm
+5. **Your token** — paste your Telegram bot token (the only input)
+6. **Deploy** — copies configs, generates secrets, starts the gateway
+
+Then open Telegram and message your bot.
+
+### Get a Telegram Bot Token
+
+1. Open Telegram → search **@BotFather**
+2. Send `/newbot`
+3. Choose a name and username
+4. Copy the token
+
+That's it. That's the only thing you need.
+
+## Architecture
+
+```
+You (Telegram) → LeOpus (Main Agent)
+                    ├── Builder   — writes code, creates files
+                    ├── Scout     — researches, fetches info
+                    ├── Operator  — browser automation, system ops
+                    └── Analyst   — data analysis, summaries
+```
+
+LeOpus (main) never executes directly — it plans, delegates to sub-agents,
+and verifies results. Think CEO, not intern.
+
+## Key Files
+
+After install, your workspace lives at `~/.openclaw/workspace/`:
+
+| File | Purpose |
+|------|---------|
+| `SOUL.md` | Agent personality, values, execution rules |
+| `AGENTS.md` | Boot sequence, task lifecycle, write discipline |
+| `USER.md` | Info about you (name, timezone) |
+| `IDENTITY.md` | Agent identity |
+| `MEMORY.md` | Memory index |
+| `HEARTBEAT.md` | Automated health check schedule |
+| `templates/task-template.md` | Template for multi-step tasks |
+
+Everything is plain Markdown. Edit any file to customize behavior.
+
+## Commands
+
+```bash
+openclaw gateway status     # check if running
+openclaw gateway restart    # restart
+openclaw gateway stop       # stop
+openclaw gateway logs       # view logs
+```
+
+## What Makes This Different
+
+Most AI setups are a model behind an API. LeOpus is an **opinionated system**
+built from months of real-world usage:
+
+- **Truth over agreement** — it will push back if you're wrong
+- **Proof rule** — every claim of completion includes evidence
+- **Write discipline** — all file writes are chunked and verified
+- **Loop detection** — catches itself if stuck in reasoning loops
+- **No completion theater** — never says "done" without proof
+
+## Customization
+
+### Change the LLM
+
+Edit `~/.openclaw/openclaw.json` — swap `qwen3:8b` for any Ollama model:
+
+```bash
+ollama pull llama3:8b          # Meta Llama 3
+ollama pull mistral:7b         # Mistral
+ollama pull deepseek-v3:8b     # DeepSeek
+```
+
+Or point to a cloud provider (OpenAI, Anthropic, etc.) by updating the
+`providers` section in `openclaw.json`.
+
+### Add Skills
+
+```bash
+openclaw skills install <skill-name>
+```
+
+Browse available skills at [clawhub.com](https://clawhub.com).
+
+### Change Personality
+
+Edit `~/.openclaw/workspace/SOUL.md`. It's just Markdown.
+Want a friendlier assistant? A stricter one? A pirate? Change the file.
+
+## FAQ
+
+**Q: Is this really free?**
+Yes. Ollama is open source. Qwen3 is open weight. OpenClaw is open source.
+The only cost is the electricity to run your machine.
+
+**Q: How much VRAM does it need?**
+Qwen3 8B needs ~5GB. Works on most NVIDIA cards (GTX 1060+) and all Apple Silicon.
+CPU-only works too, just slower.
+
+**Q: Can I use a cloud LLM instead?**
+Yes. Edit openclaw.json to add OpenAI, Anthropic, or any OpenAI-compatible API.
+
+**Q: What about privacy?**
+Everything runs locally by default. Your conversations never leave your machine
+unless you configure a cloud provider.
+
+## Credits
+
+Built by [@rodawg71](https://github.com/rodawg71), evolved through daily use
+with [OpenClaw](https://github.com/openclaw/openclaw).
+
+Based on [clawdboss](https://github.com/NanoFlow-io/clawdboss) by NanoFlow-io.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT
