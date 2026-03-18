@@ -1,0 +1,67 @@
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://localhost:11434/v1",
+        "apiKey": "ollama",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "qwen3:8b",
+            "name": "Qwen3 8B (Local)",
+            "input": ["text"],
+            "contextWindow": 32768,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "ollama/qwen3:8b"
+      },
+      "compaction": {
+        "mode": "safeguard"
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 4
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "workspace": "__WORKSPACE_DIR__",
+        "subagents": {
+          "allowAgents": ["main", "builder", "scout", "operator", "analyst"]
+        }
+      },
+      { "id": "builder" },
+      { "id": "scout" },
+      { "id": "operator" },
+      { "id": "analyst" }
+    ]
+  },
+  "tools": {
+    "web": { "fetch": { "enabled": true } },
+    "exec": { "enabled": true }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": {
+        "enabled": true,
+        "source": "builtin:telegram",
+        "config": {
+          "token": "__TELEGRAM_TOKEN__"
+        }
+      }
+    }
+  },
+  "gateway": {
+    "secret": "__GATEWAY_SECRET__"
+  }
+}
